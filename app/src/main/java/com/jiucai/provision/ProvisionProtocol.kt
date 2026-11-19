@@ -26,10 +26,13 @@ object ProvisionProtocol {
         byteArrayOf(0, 0, 0, 1, 0, 0, 0, 3).toList() to "S7PE",
     )
 
+    private val DEFAULT_PRODUCT_CODE = byteArrayOf(0, 0, 0, 1, 0, 0, 0, 1)
+
     data class Incoming(
         val type: Int,
         val mac: String,
         val model: String,
+        val productCode: ByteArray,
         val raw: ByteArray,
     )
 
@@ -67,14 +70,15 @@ object ProvisionProtocol {
         val type = p[27].toInt() and 0xFF
         if (type != TYPE_AP_CONNECTED && type != TYPE_CONFIRM) return null
 
-        val code = p.copyOfRange(4, 12).toList()
-        val model = MODEL_CODES[code] ?: "未知(%s)".format(
-            p.copyOfRange(4, 12).joinToString("") { "%02X".format(it.toInt() and 0xFF) }
+        val productCode = p.copyOfRange(4, 12)
+        val model = MODEL_CODES[productCode.toList()] ?: "未知(%s)".format(
+            productCode.joinToString("") { "%02X".format(it.toInt() and 0xFF) }
         )
         return Incoming(
             type = type,
             mac = hex(p, 12, 18),
             model = model,
+            productCode = productCode,
             raw = packet.copyOf(32),
         )
     }
@@ -83,7 +87,7 @@ object ProvisionProtocol {
      * 构造 48 字节回包（原版 `jr.e` / ResponseIpCode）：
      * ```
      * [0..3]   55 AA 00 30
-     * [4..11]  00 00 00 01 00 00 00 01
+     * [4..11]  产品码（原样回显秤上报的 8 字节产品码，兼容 S7/S7P/S7PE/S9）
      * [12..17] 0
      * [18..23] 秤 MAC
      * [26..27] 40 10
@@ -93,9 +97,15 @@ object ProvisionProtocol {
      * ```
      * 整包 XOR 0x55 后发出。
      */
-    fun buildServerReply(macHex: String, serverIp: String, serverPort: Int): ByteArray {
+    fun buildServerReply(
+        macHex: String,
+        serverIp: String,
+        serverPort: Int,
+        productCode: ByteArray = DEFAULT_PRODUCT_CODE,
+    ): ByteArray {
         val mac = macHex.split(":").map { it.toInt(16).toByte() }
         require(mac.size == 6) { "MAC 格式错误: $macHex" }
+        require(productCode.size == 8) { "产品码长度错误: ${productCode.size}" }
 
         val parts = serverIp.split(".")
         require(parts.size == 4) { "服务器 IP 格式错误: $serverIp" }
@@ -112,14 +122,7 @@ object ProvisionProtocol {
         p[1] = 0xAA.toByte()
         p[2] = 0x00
         p[3] = 48
-        p[4] = 0
-        p[5] = 0
-        p[6] = 0
-        p[7] = 1
-        p[8] = 0
-        p[9] = 0
-        p[10] = 0
-        p[11] = 1
+        for (i in 0..7) p[4 + i] = productCode[i]
         for (i in 0..5) p[18 + i] = mac[i]
         p[24] = 0
         p[25] = 0

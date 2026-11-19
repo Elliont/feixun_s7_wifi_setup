@@ -3,6 +3,7 @@ package com.jiucai.provision
 import android.content.Context
 import android.net.wifi.WifiManager
 import com.espressif.iot.esptouch.EsptouchTask
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -152,7 +153,7 @@ class Provisioner(
                 onLog("等待秤发来握手包（最长 ${TIMEOUT_MS / 1000}s）…")
                 val deadline = System.currentTimeMillis() + TIMEOUT_MS
                 val startedWaiting = System.currentTimeMillis()
-                var serverSent = false
+                var lastReplyAt = 0L
                 var rawCount = 0
                 var lastTick = 0L
 
@@ -185,23 +186,27 @@ class Provisioner(
                     onLog("  → 解析成功：${incoming.model}  MAC=${incoming.mac}  type=0x%02X".format(incoming.type))
 
                     when (incoming.type) {
-                        ProvisionProtocol.TYPE_AP_CONNECTED -> if (!serverSent) {
-                            onStep(Step.SERVER_SENT)
-                            val reply = ProvisionProtocol.buildServerReply(
-                                macHex = incoming.mac,
-                                serverIp = serverIp,
-                                serverPort = serverPort,
-                            )
-                            onLog("回包 hex：${reply.joinToString(" ") { "%02X".format(it.toInt() and 0xFF) }}")
-                            val sent = withContext(Dispatchers.IO) {
-                                sendReply(sockets.first(), received.from, reply)
+                        ProvisionProtocol.TYPE_AP_CONNECTED -> {
+                            val now = System.currentTimeMillis()
+                            // UDP 不可靠：收到秤重发的 0x10 且距上次发送超过节流间隔时再次回包，直到收到 0x20 确认
+                            if (now - lastReplyAt >= REPLY_THROTTLE_MS) {
+                                onStep(Step.SERVER_SENT)
+                                val reply = ProvisionProtocol.buildServerReply(
+                                    macHex = incoming.mac,
+                                    serverIp = serverIp,
+                                    serverPort = serverPort,
+                                    productCode = incoming.productCode,
+                                )
+                                onLog("回包 hex：${reply.joinToString(" ") { "%02X".format(it.toInt() and 0xFF) }}")
+                                val sent = withContext(Dispatchers.IO) {
+                                    sendReply(sockets.first(), received.from, reply)
+                                }
+                                if (sent) lastReplyAt = System.currentTimeMillis()
+                                onLog(
+                                    if (sent) "已把服务器地址 ${serverIp}:${serverPort} 发给秤（重发 $SEND_RETRY 次）"
+                                    else "回包发送失败，将重试"
+                                )
                             }
-                            // 只有在真正发送成功时才置位，失败时保留重试机会
-                            if (sent) serverSent = true
-                            onLog(
-                                if (sent) "已把服务器地址 ${serverIp}:${serverPort} 发给秤（重发 $SEND_RETRY 次）"
-                                else "回包发送失败，将重试"
-                            )
                         }
 
                         ProvisionProtocol.TYPE_CONFIRM -> {
@@ -219,6 +224,9 @@ class Provisioner(
                 onLog("  2) 手机是否连在 2.4G WiFi（不能是 5G）")
                 onLog("  3) 路由器是否开启「客户端隔离」")
                 onLog("  4) 手机是否开着代理/VPN")
+            } catch (e: CancellationException) {
+                // 正常取消（如用户点击「停止」），向上传播，不覆写为 FAILED
+                throw e
             } catch (e: Exception) {
                 onStep(Step.FAILED)
                 onLog("配网异常：${e.message}")
@@ -282,5 +290,6 @@ class Provisioner(
         const val TIMEOUT_MS = 150_000L
         const val SEND_RETRY = 10
         const val SEND_INTERVAL_MS = 100L
+        const val REPLY_THROTTLE_MS = 2_000L
     }
 }
