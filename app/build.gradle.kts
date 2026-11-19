@@ -16,6 +16,26 @@ android {
         versionName = "0.3.1"
     }
 
+    // 自签名证书随仓库提供，保证每次发布签名一致、可覆盖安装。
+    // 仅用于个人自建分发，私钥公开不影响用途（不用于身份鉴别）。
+    signingConfigs {
+        create("release") {
+            storeFile = file("release.jks")
+            storePassword = "jiucai-s7-2026"
+            keyAlias = "jiucai-s7"
+            keyPassword = "jiucai-s7-2026"
+            storeType = "PKCS12"
+        }
+    }
+
+    buildTypes {
+        release {
+            signingConfig = signingConfigs.getByName("release")
+            isMinifyEnabled = false
+            isShrinkResources = false
+        }
+    }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17

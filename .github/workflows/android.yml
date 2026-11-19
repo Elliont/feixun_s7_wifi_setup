@@ -13,7 +13,7 @@ permissions:
 
 jobs:
   build:
-    name: 构建 debug APK
+    name: 构建 release APK
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -34,17 +34,17 @@ jobs:
       - name: 构建
         run: |
           chmod +x gradlew          # Windows 提交不带可执行位
-          ./gradlew assembleDebug --no-daemon --stacktrace
+          ./gradlew assembleRelease --no-daemon --stacktrace
 
       - name: 上传 APK
         uses: actions/upload-artifact@v4
         with:
-          name: provision-debug-apk
-          path: app/build/outputs/apk/debug/*.apk
+          name: provision-release-apk
+          path: app/build/outputs/apk/release/*.apk
           if-no-files-found: error
 
       - name: 附加到 Release
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
-          files: app/build/outputs/apk/debug/*.apk
+          files: app/build/outputs/apk/release/*.apk
