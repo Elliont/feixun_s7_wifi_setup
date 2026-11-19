@@ -113,7 +113,7 @@ class MainActivity : ComponentActivity() {
             Provisioner(
                 context = context,
                 scope = scope,
-                onLog = { line ->
+                logSink = { line ->
                     logs.add(0, line)
                     if (logs.size > 200) logs.removeAt(logs.size - 1)
                 },
