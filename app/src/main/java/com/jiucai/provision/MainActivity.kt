@@ -54,22 +54,23 @@ private val ErrColor = Color(0xFFE5484D)
 
 class MainActivity : ComponentActivity() {
 
-    private var pending: (() -> Unit)? = null
+    private var pending: ((Boolean) -> Unit)? = null
 
     private val permissionLauncher =
-        registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
-            pending?.invoke()
+        registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { results ->
+            // 只有必需权限全部授予才继续；拒绝时把结果交给调用方给出明确提示
+            val granted = results.values.all { it }
+            pending?.invoke(granted)
             pending = null
         }
 
-    private fun requestPermissions(then: () -> Unit) {
+    private fun requestPermissions(then: (Boolean) -> Unit) {
         // 关键：读 SSID 在 Android 10+ 一律需要 ACCESS_FINE_LOCATION
         // Android 13+ 还需要 NEARBY_WIFI_DEVICES
+        // ACCESS_WIFI_STATE / CHANGE_WIFI_STATE 是 normal 权限，安装即授予，无需运行时申请
         val perms = buildList {
             add(Manifest.permission.ACCESS_FINE_LOCATION)
             if (Build.VERSION.SDK_INT >= 33) add(Manifest.permission.NEARBY_WIFI_DEVICES)
-            add(Manifest.permission.ACCESS_WIFI_STATE)
-            add(Manifest.permission.CHANGE_WIFI_STATE)
         }.toTypedArray()
         pending = then
         permissionLauncher.launch(perms)
@@ -85,7 +86,7 @@ class MainActivity : ComponentActivity() {
     }
 
     @Composable
-    private fun ProvisionScreen(onRequestPermission: (() -> Unit) -> Unit) {
+    private fun ProvisionScreen(onRequestPermission: ((Boolean) -> Unit) -> Unit) {
         val context: Context = LocalContext.current
         val scope = rememberCoroutineScope()
 
@@ -100,7 +101,6 @@ class MainActivity : ComponentActivity() {
         var allIps by remember { mutableStateOf("") }
         var waited by remember { mutableStateOf(0) }
         var vpnActive by remember { mutableStateOf(false) }
-        var wifiTransport by remember { mutableStateOf(false) }
         var password by remember { mutableStateOf("") }
         var serverIp by remember { mutableStateOf("") }
         var serverPort by remember { mutableStateOf("30101") }
@@ -133,7 +133,6 @@ class MainActivity : ComponentActivity() {
             is24G = info.is24G
             allIps = info.allIps.joinToString(" / ")
             vpnActive = info.vpnActive
-            wifiTransport = info.wifiTransport
             logs.add(
                 0,
                 if (info.valid) {
@@ -148,12 +147,12 @@ class MainActivity : ComponentActivity() {
         }
 
         // 进页面自动读一次 + 自动弹权限
-        val autoAsked = remember { mutableStateOf(false) }
+        // LaunchedEffect(Unit) 每次组合生命周期只执行一次，无需额外的 autoAsked 状态去防重
         androidx.compose.runtime.LaunchedEffect(Unit) {
             refreshWifiInfo()
-            if (!autoAsked.value) {
-                autoAsked.value = true
-                onRequestPermission { refreshWifiInfo() }
+            onRequestPermission { granted ->
+                if (granted) refreshWifiInfo()
+                else error = "需要定位/附近设备权限才能读取 WiFi 信息"
             }
         }
 
@@ -165,6 +164,13 @@ class MainActivity : ComponentActivity() {
                     kotlinx.coroutines.delay(1000)
                     waited++
                 }
+            }
+        }
+
+        // 终态时结束忙碌状态（不要在组合体内直接写状态）
+        androidx.compose.runtime.LaunchedEffect(step) {
+            if (step == Provisioner.Step.CONFIRMED || step == Provisioner.Step.FAILED) {
+                busy = false
             }
         }
 
@@ -255,7 +261,12 @@ class MainActivity : ComponentActivity() {
                     )
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Button(
-                            onClick = { onRequestPermission { refreshWifiInfo() } },
+                            onClick = {
+                                onRequestPermission { granted ->
+                                    if (granted) refreshWifiInfo()
+                                    else error = "需要定位/附近设备权限才能读取 WiFi 信息"
+                                }
+                            },
                             shape = RoundedCornerShape(20.dp),
                             colors = ButtonDefaults.buttonColors(containerColor = TealBg, contentColor = Teal),
                             modifier = Modifier.height(36.dp),
@@ -275,7 +286,7 @@ class MainActivity : ComponentActivity() {
                     if (password.isBlank()) { error = "请填写 WiFi 密码"; return@Button }
                     val port = serverPort.toIntOrNull()
                     if (port == null || port !in 1..65535) { error = "服务器端口不合法"; return@Button }
-                    if (serverIp.split(".").size != 4) { error = "服务器 IP 不合法"; return@Button }
+                    if (!isValidIpv4(serverIp)) { error = "服务器 IP 不合法"; return@Button }
                     if (vpnActive) {
                         error = "检测到 VPN 正在运行 —— 它会吞掉 UDP 广播和秤的回包，请先关闭 VPN 再配网"
                         return@Button
@@ -285,10 +296,14 @@ class MainActivity : ComponentActivity() {
                         return@Button
                     }
 
-                    onRequestPermission {
-                        busy = true
-                        logs.clear()
-                        provisioner.start(ssid, bssid, password, serverIp, port)
+                    onRequestPermission { granted ->
+                        if (!granted) {
+                            error = "需要定位/附近设备权限才能配网"
+                        } else {
+                            busy = true
+                            logs.clear()
+                            provisioner.start(ssid, bssid, password, serverIp, port)
+                        }
                     }
                 },
                 enabled = !busy,
@@ -321,8 +336,6 @@ class MainActivity : ComponentActivity() {
                         fontWeight = FontWeight.Medium,
                     )
                     error?.let { Text(it, fontSize = 12.sp, color = ErrColor) }
-                    if (step == Provisioner.Step.CONFIRMED) busy = false
-                    if (step == Provisioner.Step.FAILED) busy = false
                 }
             }
 
@@ -339,6 +352,13 @@ class MainActivity : ComponentActivity() {
             }
             Spacer(Modifier.height(32.dp))
         }
+    }
+}
+
+private fun isValidIpv4(ip: String): Boolean {
+    val parts = ip.split(".")
+    return parts.size == 4 && parts.all { part ->
+        part.length in 1..3 && part.all { it in '0'..'9' } && part.toInt() in 0..255
     }
 }
 

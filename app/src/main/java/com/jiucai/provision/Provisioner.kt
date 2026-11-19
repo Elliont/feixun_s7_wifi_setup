@@ -28,11 +28,19 @@ import java.net.SocketTimeoutException
 class Provisioner(
     private val context: Context,
     private val scope: CoroutineScope,
-    private val onLog: (String) -> Unit,
+    logSink: (String) -> Unit,
     private val onStep: (Step) -> Unit,
 ) {
 
     enum class Step { IDLE, ESPTOUCH, WAIT_SCALE, SERVER_SENT, CONFIRMED, FAILED }
+
+    /**
+     * 所有日志统一切回主线程再回写 Compose 的 SnapshotStateList，
+     * 避免 IO/默认线程直接写 UI 状态。调用方无需关心线程。
+     */
+    private val onLog: (String) -> Unit = { line ->
+        scope.launch(Dispatchers.Main) { logSink(line) }
+    }
 
     private data class Received(val data: ByteArray, val from: InetAddress, val port: Int)
 
@@ -41,7 +49,8 @@ class Provisioner(
     private var esptouch: EsptouchTask? = null
     private val sockets = mutableListOf<DatagramSocket>()
     private val receiveJobs = mutableListOf<Job>()
-    private val inbox = Channel<Received>(Channel.UNLIMITED)
+    // 每轮 start() 都重建，避免上一轮残留帧在新一轮被误读为握手包
+    private var inbox = Channel<Received>(Channel.UNLIMITED)
     private var multicastLock: WifiManager.MulticastLock? = null
 
     val running: Boolean get() = job?.isActive == true
@@ -54,6 +63,8 @@ class Provisioner(
         serverPort: Int,
     ) {
         if (running) return
+        // 新一轮开始：重建 inbox，丢弃上一轮可能残留的 UDP 帧
+        inbox = Channel(Channel.UNLIMITED)
         onStep(Step.IDLE)
         job = scope.launch {
             try {
@@ -185,10 +196,11 @@ class Provisioner(
                             val sent = withContext(Dispatchers.IO) {
                                 sendReply(sockets.first(), received.from, reply)
                             }
-                            serverSent = true
+                            // 只有在真正发送成功时才置位，失败时保留重试机会
+                            if (sent) serverSent = true
                             onLog(
                                 if (sent) "已把服务器地址 ${serverIp}:${serverPort} 发给秤（重发 $SEND_RETRY 次）"
-                                else "回包发送失败"
+                                else "回包发送失败，将重试"
                             )
                         }
 

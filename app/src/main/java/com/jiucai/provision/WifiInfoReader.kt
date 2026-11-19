@@ -25,7 +25,6 @@ object WifiInfoReader {
         val locationGranted: Boolean,
         val nearbyGranted: Boolean,
         val vpnActive: Boolean,
-        val wifiTransport: Boolean,
     ) {
         val valid: Boolean get() = !TextUtils.isEmpty(ssid) && ssid != "<unknown ssid>"
 
@@ -64,7 +63,6 @@ object WifiInfoReader {
         val all = allIpv4()
         return Info(
             vpnActive = vpnActive(app),
-            wifiTransport = wifiTransport(app),
             ssid = ssid,
             bssid = bssid,
             phoneIp = wifiIp(wifi) ?: pickLanIp(all),
@@ -81,13 +79,6 @@ object WifiInfoReader {
         val cm = app.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
         val nw = cm.activeNetwork ?: return false
         cm.getNetworkCapabilities(nw)?.hasTransport(NetworkCapabilities.TRANSPORT_VPN) == true
-    }.getOrDefault(false)
-
-    /** 当前活跃网络是不是 WiFi（VPN 开着时会导致这里为 false） */
-    private fun wifiTransport(app: Context): Boolean = runCatching {
-        val cm = app.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
-        val nw = cm.activeNetwork ?: return false
-        cm.getNetworkCapabilities(nw)?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) == true
     }.getOrDefault(false)
 
     @Suppress("DEPRECATION")
@@ -111,6 +102,4 @@ object WifiInfoReader {
             ?: all.firstOrNull { it.startsWith("172.") }
             ?: all.firstOrNull()
             ?: ""
-
-    fun localIpv4(): String = pickLanIp(allIpv4())
 }

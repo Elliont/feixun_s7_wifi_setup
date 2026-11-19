@@ -1,10 +1,5 @@
 package com.jiucai.provision
 
-import java.net.DatagramSocket
-import java.net.InetAddress
-import java.net.InetSocketAddress
-import java.util.zip.Adler32
-
 /**
  * 斐讯 S7 配网协议（从原版 App 反编译还原，逐字节对齐）。
  *
@@ -102,8 +97,15 @@ object ProvisionProtocol {
         val mac = macHex.split(":").map { it.toInt(16).toByte() }
         require(mac.size == 6) { "MAC 格式错误: $macHex" }
 
-        val ip = serverIp.split(".").map { it.toInt() }
-        require(ip.size == 4) { "服务器 IP 格式错误: $serverIp" }
+        val parts = serverIp.split(".")
+        require(parts.size == 4) { "服务器 IP 格式错误: $serverIp" }
+        // 逐段严格校验：必须是 1~3 位纯数字且落在 0..255，避免 toByte() 静默截断或 toInt() 抛未捕获异常
+        val ip = parts.map { part ->
+            require(part.length in 1..3 && part.all { it in '0'..'9' }) { "服务器 IP 格式错误: $serverIp" }
+            val value = part.toInt()
+            require(value in 0..255) { "服务器 IP 段超出范围: $serverIp" }
+            value
+        }
 
         val p = ByteArray(48)
         p[0] = 0x55
@@ -136,26 +138,4 @@ object ProvisionProtocol {
         p[47] = (crc and 0xFF).toByte()
         return xor(p)
     }
-
-    /** 打开一个可用于收组的 UDP socket（自动挑 7551/7552/7553） */
-    fun openListener(): Pair<DatagramSocket, Int> {
-        var last: Exception? = null
-        for (port in LISTEN_PORTS) {
-            try {
-                val socket = DatagramSocket(null)
-                socket.reuseAddress = true
-                socket.bind(InetSocketAddress(port))
-                socket.soTimeout = 1000
-                return socket to port
-            } catch (e: Exception) {
-                last = e
-            }
-        }
-        throw IllegalStateException("端口 7551~7553 全部被占用: ${last?.message}")
-    }
-
-    @Suppress("unused")
-    private fun adler(data: ByteArray): Long = Adler32().apply { update(data) }.value
-
-    fun addressOf(ip: String, port: Int): InetAddress = InetAddress.getByName(ip)
 }
