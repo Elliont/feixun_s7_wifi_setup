@@ -74,7 +74,7 @@ docker compose logs -f ingest
 
 两段式，全部 UDP，整包 **XOR 0x55**，CRC16/MODBUS 大端。
 
-### 阶段 1：秤 → 手机（`7551~7553`，20 字节）
+### 阶段 1：秤 → 手机（`7551~7553`，32 字节）
 
 ```
 [0..1]   55 AA
@@ -153,10 +153,17 @@ sdk.dir=/path/to/Android/Sdk
 
 ---
 
+## 致谢
+
+协议格式与配网流程参考了以下社区项目，在此致谢：
+
+- [Praepes/phicomm-s7-ha](https://github.com/Praepes/phicomm-s7-ha) — 斐讯体脂秤接入 Home Assistant 的协议实现
+- [dckiller51/bodymiscale](https://github.com/dckiller51/bodymiscale) — 体脂秤数据处理与体成分算法参考
+
 ## 免责声明
 
 - 与斐讯、芯海无任何关联，未获授权
-- 协议格式来自对斐讯健康 App 与秤固件的逆向分析，**仅供个人学习、自建自用**
+- 协议格式参考公开的社区资料与实现，**仅供个人学习、自建自用**
 - 刷机 / 改配网属于非官方操作，**刷坏不保修**，后果自负
 - 请勿用于商业分发或提供服务
 
