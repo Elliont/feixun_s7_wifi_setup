@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 韭菜配网 · 启动图标前景：白色体脂秤 + 从秤身发出的 Wi-Fi 波
+     几何与 tools/gen_icon.py 里的 108x108 网格完全一致 -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- 秤体 -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M37.5,58 H70.5 A6.5,6.5 0 0 1 77,64.5 V73.5 A6.5,6.5 0 0 1 70.5,80 H37.5 A6.5,6.5 0 0 1 31,73.5 V64.5 A6.5,6.5 0 0 1 37.5,58 Z" />
+
+    <!-- 秤面上的显示屏 -->
+    <path
+        android:strokeColor="#00A98F"
+        android:strokeWidth="3.4"
+        android:strokeLineCap="round"
+        android:pathData="M44,69.5 H64" />
+
+    <!-- 三段 Wi-Fi 弧 -->
+    <path
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="5.6"
+        android:strokeLineCap="round"
+        android:pathData="M45.57,50.93 A11,11 0 0 1 62.43,50.93" />
+    <path
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="5.6"
+        android:strokeLineCap="round"
+        android:pathData="M40.59,46.75 A17.5,17.5 0 0 1 67.41,46.75" />
+    <path
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="5.6"
+        android:strokeLineCap="round"
+        android:pathData="M35.62,42.57 A24,24 0 0 1 72.38,42.57" />
+
+    <!-- 信号源 -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M54,55 m-3,0 a3,3 0 1 0 6,0 a3,3 0 1 0 -6,0" />
+</vector>

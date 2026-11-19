@@ -1,0 +1,10 @@
+# 统一用 LF（gradlew 必须是 LF，否则 Linux runner 跑不起来）
+* text=auto eol=lf
+gradlew text eol=lf
+gradlew.bat text eol=crlf
+
+*.png binary
+*.jpg binary
+*.webp binary
+*.jar binary
+*.apk binary
