@@ -58,17 +58,22 @@ class MainActivity : ComponentActivity() {
 
     private val permissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { results ->
-            // 只有必需权限全部授予才继续；拒绝时把结果交给调用方给出明确提示
-            val granted = results.values.all { it }
+            // 读取 SSID 需要精确定位；仅授予粗略定位或返回空结果均不能继续。
+            val fineGranted = results[Manifest.permission.ACCESS_FINE_LOCATION] == true
+            val nearbyGranted = Build.VERSION.SDK_INT < 33 ||
+                results[Manifest.permission.NEARBY_WIFI_DEVICES] == true
+            val granted = fineGranted && nearbyGranted
             pending?.invoke(granted)
             pending = null
         }
 
     private fun requestPermissions(then: (Boolean) -> Unit) {
         // 关键：读 SSID 在 Android 10+ 一律需要 ACCESS_FINE_LOCATION
+        // Android 12+ 必须把 COARSE/FINE 放在同一次请求里，否则部分版本会忽略请求
         // Android 13+ 还需要 NEARBY_WIFI_DEVICES
         // ACCESS_WIFI_STATE / CHANGE_WIFI_STATE 是 normal 权限，安装即授予，无需运行时申请
         val perms = buildList {
+            add(Manifest.permission.ACCESS_COARSE_LOCATION)
             add(Manifest.permission.ACCESS_FINE_LOCATION)
             if (Build.VERSION.SDK_INT >= 33) add(Manifest.permission.NEARBY_WIFI_DEVICES)
         }.toTypedArray()

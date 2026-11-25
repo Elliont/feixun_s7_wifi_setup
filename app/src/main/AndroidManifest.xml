@@ -8,6 +8,7 @@
     <uses-permission android:name="android.permission.CHANGE_WIFI_STATE" />
     <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
     <!-- 读取 SSID 需要；Android 13+ 仍需保留（NEARBY_WIFI_DEVICES 不足以保证拿到 SSID） -->
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission
         android:name="android.permission.NEARBY_WIFI_DEVICES"
